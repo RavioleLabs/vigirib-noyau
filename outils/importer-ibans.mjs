@@ -1,7 +1,8 @@
 // Importe les IBAN de référence d'un client (reçus chiffrés par mail depuis /installation/import/) dans sa mémoire.
 // Usage : node outils/importer-ibans.mjs <client> < mails.txt   (un ou plusieurs blocs « LISTE VIGIRIB » à la suite)
-// Lit la clé d'empreinte du client dans ~/.vigirib-clients/<client>.env, écrit ~/.vigirib-clients/<client>/registre.json.
-// N'affiche AUCUN IBAN : seulement le nombre importé.
+// Ici, les listes sont déchiffrées avec la clé privée, puis passées au serveur par SSH sans être écrites sur cet ordinateur.
+// Sur le serveur (--sur-le-serveur), les empreintes sont calculées avec la clé du client (~/.vigi/clients/<client>.env)
+// dans sa mémoire (~/.vigi/donnees/<client>/registre.json). N'affiche AUCUN IBAN : seulement le nombre importé.
 import {privateDecrypt,constants,createDecipheriv} from 'node:crypto';
 import {inflateRawSync} from 'node:zlib';
 import {readFileSync,mkdirSync} from 'node:fs';
@@ -10,6 +11,7 @@ import {parseEnv} from 'node:util';
 import {DEBUT_LISTE,FIN_LISTE} from '../navigateur/chiffrement.js';
 import {cleValide,normaliser} from '../lib/iban.mjs';
 import {creerRegistre} from '../lib/registre.mjs';
+import {surLeServeur} from './serveur.mjs';
 
 export function dechiffrerListes(texte,clePrivee){
   const listes=[];
@@ -32,12 +34,16 @@ export function importer(listes,registre,{date=new Date().toISOString()}={}){
 }
 
 if(import.meta.url===`file://${process.argv[1]}`){
-  const client=process.argv[2];
+  const serveur=process.argv[2]==='--sur-le-serveur',client=process.argv[serveur?3:2];
   if(!client||!/^[a-z0-9-]+$/.test(client)){console.error('Usage : node outils/importer-ibans.mjs <client> < mails.txt');process.exit(1);}
-  const conf=parseEnv(readFileSync(`${homedir()}/.vigirib-clients/${client}.env`,'utf8'));
-  const listes=dechiffrerListes(readFileSync(0,'utf8'),readFileSync(process.env.VIGIRIB_CLE_PRIVEE||`${homedir()}/.vigirib-installation-cle.pem`,'utf8'));
-  const dossier=`${homedir()}/.vigirib-clients/${client}`;mkdirSync(dossier,{recursive:true,mode:0o700});
-  const registre=creerRegistre(`${dossier}/registre.json`,{cle:Buffer.from(conf.VIGI_CLE,'hex')});
-  const r=importer(listes,registre);registre.sauver();
-  console.log(`${r.importes} IBAN de référence importés pour ${client} (${r.rejetes} rejetés, clé invalide). Aucun IBAN n'est affiché ni stocké en clair.`);
+  if(!serveur){
+    const listes=dechiffrerListes(readFileSync(0,'utf8'),readFileSync(process.env.VIGIRIB_CLE_PRIVEE||`${homedir()}/.vigirib-installation-cle.pem`,'utf8'));
+    await surLeServeur(`cd ~/vigi && node outils/importer-ibans.mjs --sur-le-serveur ${client}`,JSON.stringify(listes));
+  }else{
+    const conf=parseEnv(readFileSync(`${process.env.VIGI_CLIENTS||homedir()+'/.vigi/clients'}/${client}.env`,'utf8'));
+    const dossier=`${process.env.VIGI_DONNEES||homedir()+'/.vigi/donnees'}/${client}`;mkdirSync(dossier,{recursive:true,mode:0o700});
+    const registre=creerRegistre(`${dossier}/registre.json`,{cle:Buffer.from(conf.VIGI_CLE,'hex')});
+    const r=importer(JSON.parse(readFileSync(0,'utf8')),registre);registre.sauver();
+    console.log(`${r.importes} IBAN de référence importés pour ${client} (${r.rejetes} rejetés, clé invalide). Aucun IBAN n'est affiché ni stocké en clair.`);
+  }
 }

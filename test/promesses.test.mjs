@@ -100,3 +100,26 @@ test('promesse : une alerte ne contient jamais d’IBAN complet', async () => {
   await alerte({niveau:'alerte',raisons:['IBAN nouveau pour f.test (FR76 … 0143), différent de FR12 … 0101'],ibans:[IBAN]},{de:'f@f.test',objet:'Facture'});
   assert.equal(envois.length,1);assert.ok(!envois[0].texte.includes(IBAN));
 });
+
+test('promesse : les secrets déchiffrés partent au serveur par l’entrée standard de SSH, sans fichier local ni écrasement', async () => {
+  const {deposerClient,surLeServeur}=await import('../outils/serveur.mjs');
+  const {EventEmitter}=await import('node:events');
+  const appels=[];
+  const executer=code=>(cmd,args)=>{const p=new EventEmitter();p.stdin={end:d=>{appels.push({cmd,args,entree:d});setImmediate(()=>p.emit('close',code));}};return p;};
+  await deposerClient('client','IMAP_MOT_DE_PASSE=secret\n',{serveur:'vigi',executer:executer(0)});
+  assert.equal(appels[0].cmd,'ssh');
+  assert.match(appels[0].args[1],/^umask 077;.*if \[ -e ~\/\.vigi\/clients\/client\.env \].*exit 3; fi; cat > ~\/\.vigi\/clients\/client\.env$/);
+  assert.doesNotMatch(appels[0].args[1],/secret/,'jamais sur la ligne de commande');
+  assert.equal(appels[0].entree,'IMAP_MOT_DE_PASSE=secret\n');
+  assert.throws(()=>deposerClient('../x; rm -rf ~','x',{executer:executer(0)}),/invalide/);
+  await assert.rejects(surLeServeur('true','x',{executer:executer(3)}),/refusé/);
+});
+
+test('promesse : la mémoire des IBAN est lisible par le seul compte du service (0600)', async () => {
+  const {statSync,writeFileSync}=await import('node:fs');
+  const f=join(mkdtempSync(join(tmpdir(),'noyau-droits-')),'registre.json');
+  writeFileSync(f,'{"fournisseurs":{}}',{mode:0o664});
+  const r=creerRegistre(f,{cle:Buffer.alloc(32,3)});r.vu('f.test','d');r.sauver();
+  assert.equal(statSync(f).mode&0o777,0o600);
+});
+
