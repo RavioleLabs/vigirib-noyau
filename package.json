@@ -1,0 +1,10 @@
+{
+  "name": "vigirib-noyau",
+  "private": true,
+  "type": "module",
+  "description": "Le code de Vigirib qui touche aux données des clients, publié pour être vérifié.",
+  "license": "EUPL-1.2",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}
