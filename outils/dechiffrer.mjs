@@ -25,7 +25,9 @@ export function envDuClient(c){
     `IMAP_UTILISATEUR=${propre(c.utilisateur)}`,`IMAP_MOT_DE_PASSE=${propre(c.motDePasse)}`,`IMAP_BOITE=${propre(c.boite||'INBOX')}`,
     `VIGI_ALERTE_MAIL=${propre(c.alertes)}`,
     // Clé d'empreinte propre à chaque entreprise, comme le promet le site.
-    `VIGI_CLE=${c.cle||randomBytes(32).toString('hex')}`,''].join('\n');
+    `VIGI_CLE=${c.cle||randomBytes(32).toString('hex')}`,
+    // Pas d'analyse par un service externe pendant l'essai (conditions de l'essai) : aucun texte de mail ne quitte OVHcloud.
+    'VIGI_JEV=0',''].join('\n');
 }
 
 if(import.meta.url===`file://${process.argv[1]}`){
