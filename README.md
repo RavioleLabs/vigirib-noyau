@@ -11,7 +11,7 @@ Ce dépôt publie **le code de Vigirib qui touche à vos données**, pour que ch
 | Aucun IBAN n’est stocké en clair : empreinte HMAC-SHA256 avec une clé propre à chaque entreprise, dans un fichier lisible par le seul compte du service | `lib/registre.mjs`, `lib/empreinte.mjs` |
 | Les codes d’accès et les IBAN de référence sont chiffrés dans le navigateur, puis déposés directement sur le serveur par SSH, sans copie ailleurs | `navigateur/chiffrement.js`, `outils/dechiffrer.mjs`, `outils/importer-ibans.mjs`, `outils/serveur.mjs` |
 | Une alerte ne contient jamais d’IBAN complet | `lib/alerte.mjs`, `lib/alerte-mail.mjs` |
-| Un tiers ne peut pas déclencher d’alerte chez un client ni recevoir de réponse sans authentification | `lib/reception.mjs` |
+| Un tiers ne peut pas déclencher d’alerte chez un client ni recevoir de réponse sans authentification alignée sur son domaine (un en-tête forgé ou ARC ne compte pas) | `lib/reception.mjs`, `lib/eml.mjs` |
 
 Chaque promesse a son test : `test/promesses.test.mjs`.
 

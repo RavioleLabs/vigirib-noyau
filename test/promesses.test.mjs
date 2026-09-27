@@ -123,3 +123,14 @@ test('promesse : la mémoire des IBAN est lisible par le seul compte du service 
   assert.equal(statSync(f).mode&0o777,0o600);
 });
 
+test('promesse : un mail usurpé ne passe pas pour authentifié (en-tête forgé, ARC, domaine qui ne correspond pas)', () => {
+  const brut='Authentication-Results: mx.mail.ovh.net; spf=softfail smtp.mailfrom=escroc.test; dmarc=fail header.from=victime.test\r\n'
+    +'Received: from escroc.test\r\nAuthentication-Results: mx.mail.ovh.net; dmarc=pass header.from=victime.test\r\n'
+    +'From: <patron@victime.test>\r\nSubject: TR: facture\r\n\r\nx\r\n';
+  assert.ok(!authentifie(lireEml(brut)),'seul l’en-tête posé par notre serveur, le plus haut, compte');
+  const m=(de,ar,k='authentication-results')=>({de,entetes:{[k]:ar}});
+  assert.ok(!authentifie(m('patron@victime.test','mx.mail.ovh.net; spf=pass smtp.mailfrom=escroc.test')),'SPF valide pour un autre domaine');
+  assert.ok(!authentifie(m('patron@victime.test','i=1; mx.mail.ovh.net; dkim=pass header.d=victime.test','arc-authentication-results')),'ARC ignoré');
+  assert.ok(authentifie(m('patron@victime.test','mx.mail.ovh.net; dmarc=pass header.from=victime.test')),'DMARC aligné accepté');
+});
+
