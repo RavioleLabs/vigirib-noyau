@@ -134,3 +134,24 @@ test('promesse : un mail usurpé ne passe pas pour authentifié (en-tête forgé
   assert.ok(authentifie(m('patron@victime.test','mx.mail.ovh.net; dmarc=pass header.from=victime.test')),'DMARC aligné accepté');
 });
 
+test('promesse : inscription seulement par le titulaire authentifié, désinscription qui efface tout', async () => {
+  const {gestionInscriptions}=await import('../lib/inscriptions.mjs');
+  const {existsSync}=await import('node:fs');
+  const racine=mkdtempSync(join(tmpdir(),'noyau-inscr-')),dossierClients=join(racine,'clients'),dossier=join(racine,'donnees');
+  const g=gestionInscriptions({dossierClients,dossier});
+  const faux=`From: <patron@victime.test>\r\nTo: analyse@vigirib.test\r\nAuthentication-Results: mx.mail.ovh.net; spf=pass smtp.mailfrom=escroc.test\r\nSubject: inscription\r\n\r\nx\r\n`;
+  const vrai=`From: <compta@client.test>\r\nTo: analyse@vigirib.test\r\nAuthentication-Results: mx.mail.ovh.net; dmarc=pass header.from=client.test\r\nSubject: inscription\r\n\r\nx\r\n`;
+  const {s,port}=await serveur([faux,vrai]);const envois=[];
+  const analyser=async()=>({niveau:'ok',raisons:[],ibans:[],org:''}),memoriser=()=>{};
+  try{
+    const b=await ouvrirImap(connexion(port,{proprietaire:true}));
+    await traiterReception({boite:b,clients:[],dossier,analyser,memoriser,envoyer:async m=>{envois.push(m);},adresseReception:'analyse@vigirib.test',inscrire:g.inscrire,desinscrire:g.desinscrire});
+    await b.fermer();
+  }finally{s.close();}
+  assert.ok(!existsSync(join(dossierClients,'patron-victime-test.env')),'rien pour une adresse usurpée');
+  assert.ok(!envois.some(m=>m.a[0]==='patron@victime.test'),'aucune réponse à une adresse usurpée');
+  assert.ok(existsSync(join(dossierClients,'compta-client-test.env')));
+  assert.ok(g.desinscrire('compta@client.test').ok);
+  assert.ok(!existsSync(join(dossierClients,'compta-client-test.env'))&&!existsSync(join(dossier,'compta-client-test')),'configuration et mémoire effacées');
+});
+
